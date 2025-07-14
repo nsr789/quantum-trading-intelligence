@@ -1,0 +1,45 @@
+# ───────── Core ───────────────────────────────────────────
+pandas
+numpy
+requests
+aiohttp
+python-dotenv
+structlog
+loguru
+
+# ───────── Machine-Learning / DL ─────────────────────────
+torch                      # CPU-only
+scikit-learn
+xgboost
+onnx
+onnxruntime
+skl2onnx
+
+# ───────── LLM & Vector Stack ────────────────────────────
+openai>=1.12
+groq>=0.4
+langchain==0.2.1
+langchain-community==0.2.1
+langchain-openai==0.1.7
+crewai
+chromadb
+sentence-transformers
+
+# ───────── Finance APIs ──────────────────────────────────
+yfinance
+alpha_vantage
+finnhub-python
+fredapi
+praw                      # Reddit
+
+# ───────── Plot / UI ─────────────────────────────────────
+plotly
+streamlit
+
+# ───────── Dev / Testing ─────────────────────────────────
+joblib
+ruff
+black
+pytest
+pytest-asyncio
+textblob
