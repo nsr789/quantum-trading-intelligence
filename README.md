@@ -1,6 +1,6 @@
 # Quantum Trading Intelligence 🧠📈  
 *A lightweight research cockpit that ingests market & macro data, computes
-signals, and orchestrates multi-agent LLM reasoning — all on an 8 GB MacBook Air.*
+signals, and orchestrates multi-agent LLM reasoning.*
 
 ---
 
