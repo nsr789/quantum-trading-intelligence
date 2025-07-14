@@ -135,7 +135,7 @@ quantum-trading-intelligence
 
 ## Setup & Installation
 ```bash
-git clone https://github.com/<you>/quantum-trading-intelligence.git
+git clone https://github.com/nsr789/quantum-trading-intelligence.git
 cd quantum-trading-intelligence
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
