@@ -1,13 +1,10 @@
 # ────────────────────────── src/knowledge/vectorstore.py ─────────────────────
 """
-Chroma ≥0.5-compatible vector-store helper.
-
-• Supplies a proper SentenceTransformerEmbeddingFunction object
-• Deletes legacy collections automatically
-• Falls back to in-memory client on read-only file systems (Streamlit Cloud)
+Chroma ≥ 0.5 helper – bullet-proof against legacy collections on Streamlit Cloud
+and always provides a valid SentenceTransformerEmbeddingFunction.
 """
-from __future__ import annotations
 
+from __future__ import annotations
 from pathlib import Path
 from typing import List
 
@@ -25,50 +22,36 @@ EMBED = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
 def _seed() -> List[dict]:
     corpus = [
         ("Apple Inc. designs, manufactures and markets smartphones.", "AAPL"),
-        ("Microsoft develops, licenses and supports software.", "MSFT"),
+        ("Microsoft develops, licenses and supports software products.", "MSFT"),
         ("Alphabet (Google) provides internet services and ads.", "GOOGL"),
     ]
     return [{"content": txt, "ticker": tic, "id": f"doc-{i}"} for i, (txt, tic) in enumerate(corpus)]
 
 
-# -----------------------------------------------------------------------------#
 def _client() -> chromadb.api.ClientAPI:
-    """Writable persistent client when possible, else in-memory."""
+    """Writable persistent client when possible, else in-memory (read-only FS)."""
     try:
         return chromadb.PersistentClient(
             path=str(STORE_PATH),
-            settings=Settings(allow_reset=True)   # lets us delete incompatible data
+            settings=Settings(allow_reset=True),
         )
-    except RuntimeError:                         # read-only FS on Streamlit Cloud
+    except RuntimeError:                      # e.g. Streamlit Community Cloud
         return chromadb.Client(Settings(allow_reset=True))
-
-
-def _needs_reset(cli) -> bool:
-    """True ↦ legacy collection exists and must be wiped."""
-    for col in cli.list_collections():
-        if col.name == "company_docs":
-            try:             # triggers internal validation
-                _ = col.count()
-                return False
-            except Exception:      # any config mismatch → rebuild
-                return True
-    return False
 
 
 def load_vectorstore():
     cli = _client()
 
-    if _needs_reset(cli):
+    # ----- robust creation ----------------------------------------------------
+    try:
+        col = cli.get_or_create_collection("company_docs", embedding_function=EMBED)
+    except AttributeError:
+        # A collection created with an old plain-function embedding exists → nuke
         cli.delete_collection("company_docs")
-
-    # Create or fetch (without passing an incompatible func)
-    if "company_docs" not in [c.name for c in cli.list_collections()]:
         col = cli.create_collection("company_docs", embedding_function=EMBED)
-    else:
-        col = cli.get_collection("company_docs")
+    # -------------------------------------------------------------------------
 
-    # Seed minimal corpus
-    if col.count() == 0:
+    if col.count() == 0:              # initial seed (only 3 mini docs)
         docs = _seed()
         col.add(
             documents=[d["content"] for d in docs],
