@@ -1,12 +1,13 @@
+# sitecustomize.py
 """
-sitecustomize.py  – loaded automatically on interpreter start.
-Monkey-patches the stdlib 'sqlite3' to use the modern wheels shipped
-in pysqlite3-binary (needed for Chroma on Streamlit Cloud).
+Auto-loaded on interpreter start (PEP 370). 
+Replaces stdlib sqlite3 with the modern version shipped
+inside the pysqlite3-binary wheel — required by ChromaDB.
 """
 try:
-    import pysqlite3  # modern SQLite (>=3.44) compiled with FTS5 etc.
+    import pysqlite3          # ≥3.44 compiled with FTS5, etc.
     import sys
     sys.modules["sqlite3"] = pysqlite3
 except ImportError:
-    # local env already has a good sqlite3 → no action needed
+    # Local env already has a new-enough sqlite → nothing to do
     pass
