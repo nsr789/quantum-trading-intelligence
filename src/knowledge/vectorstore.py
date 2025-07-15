@@ -1,51 +1,55 @@
-# ── src/knowledge/vectorstore.py ───────────────────────────────────────────
+# ── src/knowledge/vectorstore.py ─────────────────────────────────────────────
 """
-Modern Chroma client (0.5+) -- no legacy config keys ⇒ no ValueError.
+Persistent Chroma collection (no legacy config).  
+Uses MiniLM embeddings via Chroma’s helper wrapper – complies with the new
+embedding-function contract (name(), version()).
 """
 
 from __future__ import annotations
+
 from pathlib import Path
 from typing import List
 
 import chromadb
 from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
+# --------------------------------------------------------------------------- #
 ROOT        = Path(__file__).resolve().parents[2]
 STORE_PATH  = ROOT / ".cache" / "chroma"
 STORE_PATH.mkdir(parents=True, exist_ok=True)
 
-_MODEL = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-def _embed(texts: List[str]) -> List[List[float]]:
-    return _MODEL.encode(texts, normalize_embeddings=True).tolist()
+EMBED = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
 
-_SEED = [
-    ("Apple Inc. designs, manufactures and markets smartphones.", "AAPL"),
-    ("Microsoft develops, licenses and supports software products.", "MSFT"),
-    ("Alphabet is the parent company of Google, focusing on internet services.", "GOOGL"),
-]
 
-def _default_docs():
-    return [{"content": c, "ticker": t, "id": f"doc-{i}"} for i, (c, t) in enumerate(_SEED)]
+def _seed_docs() -> List[dict]:
+    examples = [
+        ("Apple Inc. designs, manufactures and markets smartphones.", "AAPL"),
+        ("Microsoft develops, licenses and supports software products.", "MSFT"),
+        ("Alphabet is the parent company of Google, focusing on internet services.", "GOOGL"),
+    ]
+    return [{"content": txt, "ticker": tck, "id": f"doc-{i}"} for i, (txt, tck) in enumerate(examples)]
 
-# ––––– public helper –––––
+
+# --------------------------------------------------------------------------- #
 def load_vectorstore():
+    """Return a Chroma collection, seeding a tiny corpus on first run."""
     try:
         client = chromadb.PersistentClient(
             path=str(STORE_PATH),
-            settings=Settings(allow_reset=True),   # <- modern key
+            settings=Settings(allow_reset=True),
         )
     except RuntimeError:
-        # read-only FS fallback (Streamlit edge-case)
+        # read-only FS fallback (Streamlit Community Cloud)
         client = chromadb.Client(Settings())
 
     col = client.get_or_create_collection(
-        "company_docs",
-        embedding_function=_embed
+        name="company_docs",
+        embedding_function=EMBED,
     )
 
     if col.count() == 0:
-        docs = _default_docs()
+        docs = _seed_docs()
         col.add(
             documents=[d["content"] for d in docs],
             metadatas=[{"ticker": d["ticker"]} for d in docs],
