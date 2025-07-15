@@ -1,12 +1,11 @@
 # ── src/knowledge/vectorstore.py ─────────────────────────────────────────────
 """
-Persistent Chroma collection (no legacy config).  
-Uses MiniLM embeddings via Chroma’s helper wrapper – complies with the new
-embedding-function contract (name(), version()).
+Persistent Chroma vector-store (new client API, no legacy config).
+Uses the official SentenceTransformerEmbeddingFunction so Chroma's
+validation passes (object is callable _and_ provides name()/version()).
 """
 
 from __future__ import annotations
-
 from pathlib import Path
 from typing import List
 
@@ -28,27 +27,32 @@ def _seed_docs() -> List[dict]:
         ("Microsoft develops, licenses and supports software products.", "MSFT"),
         ("Alphabet is the parent company of Google, focusing on internet services.", "GOOGL"),
     ]
-    return [{"content": txt, "ticker": tck, "id": f"doc-{i}"} for i, (txt, tck) in enumerate(examples)]
+    return [
+        {"content": txt, "ticker": tck, "id": f"doc-{i}"}
+        for i, (txt, tck) in enumerate(examples)
+    ]
 
 
 # --------------------------------------------------------------------------- #
 def load_vectorstore():
     """Return a Chroma collection, seeding a tiny corpus on first run."""
     try:
+        # Normal case – writable filesystem
         client = chromadb.PersistentClient(
             path=str(STORE_PATH),
             settings=Settings(allow_reset=True),
         )
     except RuntimeError:
-        # read-only FS fallback (Streamlit Community Cloud)
+        # Streamlit Cloud read-only fallback
         client = chromadb.Client(Settings())
 
+    # === key line: pass EMBED object, not a plain function ===
     col = client.get_or_create_collection(
         name="company_docs",
         embedding_function=EMBED,
     )
 
-    if col.count() == 0:
+    if col.count() == 0:                      # first run → seed
         docs = _seed_docs()
         col.add(
             documents=[d["content"] for d in docs],
