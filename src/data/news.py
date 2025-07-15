@@ -26,14 +26,14 @@ NEWS_ENDPOINT = "https://newsapi.org/v2/everything"
 # ──────────────────────────────────────────────────────────────────────────────
 @cached
 def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
-    """Return DataFrame[date, title, source] of recent articles.
+    """Return **always-valid** DataFrame[date, title, source] for recent news.
 
-    Workflow:
-    1. Try NewsAPI (requires key).
-    2. Fallback to yfinance ticker headlines (robust to missing fields).
-    3. Final fallback – synthetic row so tests never fail offline.
+    Fallback chain:
+    1. NewsAPI  (if key provided)
+    2. yfinance headlines (robust to missing fields & API drift)
+    3. Synthetic placeholder row (keeps downstream tests deterministic)
     """
-    # 1️⃣  NewsAPI
+    # 1️⃣  NewsAPI ----------------------------------------------------------------
     if settings.NEWS_API_KEY:
         params = {
             "q": query,
@@ -54,13 +54,17 @@ def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
                 }
             )
 
-    # 2️⃣  yfinance fallback – handle key changes & rate-limit gracefully
+    # 2️⃣  yfinance fallback ------------------------------------------------------
+    # Yahoo occasionally drops/renames keys → use .get() & defaults.
     news = (yf.Ticker(query).news or [])[:limit]
     if news:
         rows: list[dict] = []
         for n in news:
-            # providerPublishTime disappeared for some stories → be defensive
-            ts = n.get("providerPublishTime") or n.get("provider_publish_time")
+            ts = (
+                n.get("providerPublishTime")            # old key
+                or n.get("provider_publish_time")       # newer snake-case key
+                or n.get("pubDate")                     # very old RSS key
+            )
             try:
                 dt = _dt.datetime.fromtimestamp(ts) if ts else _dt.datetime.utcnow()
             except Exception:
@@ -73,9 +77,10 @@ def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
                     "source": n.get("publisher", "") or n.get("source", ""),
                 }
             )
-        return pd.DataFrame(rows)[:limit]
+        if rows:
+            return pd.DataFrame(rows)
 
-    # 3️⃣  Synthetic guarantee (makes tests deterministic offline)
+    # 3️⃣  Synthetic placeholder --------------------------------------------------
     log.warning("No live news found – returning synthetic placeholder row.")
     return pd.DataFrame(
         {
