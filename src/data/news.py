@@ -7,7 +7,6 @@ from typing import List
 
 import pandas as pd
 import requests
-
 import yfinance as yf
 
 try:
@@ -24,14 +23,15 @@ log = get_logger(module="news")
 NEWS_ENDPOINT = "https://newsapi.org/v2/everything"
 
 
+# ──────────────────────────────────────────────────────────────────────────────
 @cached
 def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
     """Return DataFrame[date, title, source] of recent articles.
 
     Workflow:
     1. Try NewsAPI (requires key).
-    2. Fallback to yfinance ticker headlines.
-    3. Final fallback – synthetic row so tests never skip.
+    2. Fallback to yfinance ticker headlines (robust to missing fields).
+    3. Final fallback – synthetic row so tests never fail offline.
     """
     # 1️⃣  NewsAPI
     if settings.NEWS_API_KEY:
@@ -54,30 +54,39 @@ def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
                 }
             )
 
-    # 2️⃣  yfinance fallback
-    news = yf.Ticker(query).news[:limit]
+    # 2️⃣  yfinance fallback – handle key changes & rate-limit gracefully
+    news = (yf.Ticker(query).news or [])[:limit]
     if news:
-        return pd.DataFrame(
-            {
-                "date": [
-                    _dt.datetime.fromtimestamp(n["providerPublishTime"]) for n in news
-                ],
-                "title": [n["title"] for n in news],
-                "source": [n["publisher"] for n in news],
-            }
-        )
+        rows: list[dict] = []
+        for n in news:
+            # providerPublishTime disappeared for some stories → be defensive
+            ts = n.get("providerPublishTime") or n.get("provider_publish_time")
+            try:
+                dt = _dt.datetime.fromtimestamp(ts) if ts else _dt.datetime.utcnow()
+            except Exception:
+                dt = _dt.datetime.utcnow()
 
-    # 3️⃣  Synthetic guarantee (makes tests deterministic)
+            rows.append(
+                {
+                    "date": dt,
+                    "title": n.get("title", ""),
+                    "source": n.get("publisher", "") or n.get("source", ""),
+                }
+            )
+        return pd.DataFrame(rows)[:limit]
+
+    # 3️⃣  Synthetic guarantee (makes tests deterministic offline)
     log.warning("No live news found – returning synthetic placeholder row.")
     return pd.DataFrame(
         {
-            "date": [_dt.datetime.now(_dt.timezone.utc)],
+            "date": [_dt.datetime.utcnow()],
             "title": [f"No recent news for {query}"],
             "source": ["synthetic"],
         }
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────────
 @cached
 def fetch_reddit(subreddit: str = "wallstreetbets", limit: int = 50) -> List[str]:
     """Return list of post titles (requires Reddit creds)."""
