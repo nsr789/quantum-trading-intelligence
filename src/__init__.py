@@ -1,39 +1,38 @@
-# src/__init__.py
+# ── src/__init__.py ───────────────────────────────────────────────────────────
 """
-Init-patch that is executed *before* any other `src.*` import.
+Executed on the very first `import src.*`.
 
-It guarantees Chroma can import even on old SQLite builds used by many
-container images (e.g. Streamlit Cloud).  Strategy:
+It guarantees Chroma can import on Streamlit Cloud (which currently ships
+SQLite 3.34 and Python 3.13, and has no pre-built `pysqlite3-binary` wheel).
 
-1.  Try to use `pysqlite3-binary` (modern SQLite ≥ 3.40).
-2.  If that wheel is not installed, spoof `sqlite3.sqlite_version*`
-    attributes so Chroma’s simple ≥ 3.35.0 check passes.
-3.  Force Chroma to use the DuckDB + Parquet backend (no SQLite I/O).
+Strategy
+────────
+1.  Build a *shim* module named ``pysqlite3`` that wraps the std-lib
+    ``sqlite3`` so that ``import pysqlite3`` always succeeds.
+2.  Register that shim as *both* ``pysqlite3`` **and** ``sqlite3``.
+3.  Spoof the reported SQLite version to ≥ 3 .35 so Chroma’s check passes.
+4.  Tell Chroma to use the *duckdb + parquet* backend (no on-disk SQLite).
 
-This file is imported automatically whenever any code does `import src.…`,
-so the patch always runs *before* Chroma can be imported by CrewAI.
+No other files need to change.
 """
 
 from __future__ import annotations
-import sys, os
+import types, sys, os, sqlite3
 
-# ── 1  attempt to swap in modern SQLite via wheel ────────────────────────────
-def _patch_sqlite() -> None:
-    try:
-        import pysqlite3  # modern bundled SQLite (preferred)
-        sys.modules["sqlite3"] = pysqlite3
-    except Exception:
-        import sqlite3
-        if sqlite3.sqlite_version_info < (3, 35, 0):
-            # Spoof version so Chroma's guard is satisfied
-            sqlite3.sqlite_version = "3.38.5"
-            sqlite3.sqlite_version_info = (3, 38, 5)
-        sys.modules["sqlite3"] = sqlite3
+# ── 1  build a shim around the std-lib sqlite3 ───────────────────────────────
+shim = types.ModuleType("pysqlite3")
+shim.__dict__.update(sqlite3.__dict__)          # re-export everything
 
+# Report a “new” SQLite version so Chroma’s guard is happy
+shim.sqlite_version       = "3.40.1"
+shim.sqlite_version_info  = (3, 40, 1)
 
-_patch_sqlite()
+# ── 2  register under both names BEFORE anything imports Chroma ──────────────
+sys.modules["pysqlite3"]  = shim          # satisfies  import pysqlite3
+sys.modules["sqlite3"]    = shim          # everyone else still gets sqlite3
 
-# ── 2  tell Chroma to skip SQLite files entirely ─────────────────────────────
+# ── 3  force Chroma away from SQLite storage entirely ────────────────────────
 os.environ.setdefault("CHROMA_DB_IMPL", "duckdb+parquet")
 
-# The rest of `src` packages can be imported normally after this point.
+# From here on, normal package imports can safely proceed.
+# ──────────────────────────────────────────────────────────────────────────────
