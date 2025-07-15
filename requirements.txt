@@ -6,6 +6,7 @@ aiohttp
 python-dotenv
 structlog
 loguru
+pydantic-settings>=2.0
 
 # ───────── Machine-Learning / DL ─────────────────────────
 torch                      # CPU-only
