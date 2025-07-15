@@ -26,61 +26,65 @@ NEWS_ENDPOINT = "https://newsapi.org/v2/everything"
 # ──────────────────────────────────────────────────────────────────────────────
 @cached
 def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
-    """Return **always-valid** DataFrame[date, title, source] for recent news.
+    """Return **always-valid** DataFrame[date,title,source] for recent news.
 
-    Fallback chain:
-    1. NewsAPI  (if key provided)
-    2. yfinance headlines (robust to missing fields & API drift)
-    3. Synthetic placeholder row (keeps downstream tests deterministic)
+    Fallback chain
+    --------------
+    1. NewsAPI      – if `NEWS_API_KEY` is set.
+    2. Yahoo (yfinance) – robust against missing/renamed fields.
+    3. Synthetic row – so tests never fail when offline.
     """
-    # 1️⃣  NewsAPI ----------------------------------------------------------------
+    # 1️⃣  NewsAPI --------------------------------------------------------------
     if settings.NEWS_API_KEY:
-        params = {
-            "q": query,
-            "apiKey": settings.NEWS_API_KEY,
-            "pageSize": limit,
-            "sortBy": "publishedAt",
-            "language": "en",
-        }
-        resp = requests.get(NEWS_ENDPOINT, params=params, timeout=15)
-        resp.raise_for_status()
-        items = resp.json().get("articles", [])
-        if items:
-            return pd.DataFrame(
-                {
-                    "date": [i["publishedAt"] for i in items],
-                    "title": [i["title"] for i in items],
-                    "source": [i["source"]["name"] for i in items],
-                }
-            )
+        params = dict(
+            q=query,
+            apiKey=settings.NEWS_API_KEY,
+            pageSize=limit,
+            sortBy="publishedAt",
+            language="en",
+        )
+        try:
+            resp = requests.get(NEWS_ENDPOINT, params=params, timeout=15)
+            resp.raise_for_status()
+            items = resp.json().get("articles", [])
+            if items:
+                return pd.DataFrame(
+                    {
+                        "date": [i["publishedAt"] for i in items],
+                        "title": [i["title"] for i in items],
+                        "source": [i["source"]["name"] for i in items],
+                    }
+                )
+        except Exception as exc:  # pragma: no cover
+            log.warning("NewsAPI fetch failed: {}", exc)
 
-    # 2️⃣  yfinance fallback ------------------------------------------------------
-    # Yahoo occasionally drops/renames keys → use .get() & defaults.
+    # 2️⃣  Yahoo Finance fallback ----------------------------------------------
+    # Field names in the JSON response have changed over time.  Use .get().
     news = (yf.Ticker(query).news or [])[:limit]
-    if news:
-        rows: list[dict] = []
-        for n in news:
-            ts = (
-                n.get("providerPublishTime")            # old key
-                or n.get("provider_publish_time")       # newer snake-case key
-                or n.get("pubDate")                     # very old RSS key
-            )
-            try:
-                dt = _dt.datetime.fromtimestamp(ts) if ts else _dt.datetime.utcnow()
-            except Exception:
-                dt = _dt.datetime.utcnow()
+    rows: list[dict] = []
+    for n in news:
+        ts = (
+            n.get("providerPublishTime")           # historical key
+            or n.get("provider_publish_time")      # newer snake-case
+            or n.get("pubDate")                    # very old RSS key
+        )
+        try:
+            dt = _dt.datetime.fromtimestamp(ts) if ts else _dt.datetime.utcnow()
+        except Exception:
+            dt = _dt.datetime.utcnow()
 
-            rows.append(
-                {
-                    "date": dt,
-                    "title": n.get("title", ""),
-                    "source": n.get("publisher", "") or n.get("source", ""),
-                }
-            )
-        if rows:
-            return pd.DataFrame(rows)
+        rows.append(
+            {
+                "date": dt,
+                "title": n.get("title", ""),
+                "source": n.get("publisher", "") or n.get("source", ""),
+            }
+        )
 
-    # 3️⃣  Synthetic placeholder --------------------------------------------------
+    if rows:
+        return pd.DataFrame(rows)
+
+    # 3️⃣  Synthetic placeholder -----------------------------------------------
     log.warning("No live news found – returning synthetic placeholder row.")
     return pd.DataFrame(
         {
@@ -104,5 +108,4 @@ def fetch_reddit(subreddit: str = "wallstreetbets", limit: int = 50) -> List[str
         client_secret=settings.REDDIT_CLIENT_SECRET,
         user_agent=settings.REDDIT_USER_AGENT,
     )
-    posts = reddit.subreddit(subreddit).hot(limit=limit)
-    return [p.title for p in posts]
+    return [p.title for p in reddit.subreddit(subreddit).hot(limit=limit)]
