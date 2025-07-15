@@ -7,7 +7,7 @@ python-dotenv
 structlog
 loguru
 pydantic-settings>=2.0
-pysqlite3-binary>=0.5.2
+pysqlite3-binary
 
 # ───────── Machine-Learning / DL ─────────────────────────
 torch                      # CPU-only
