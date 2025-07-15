@@ -1,6 +1,4 @@
 from __future__ import annotations
-import os
-os.environ.setdefault("CHROMA_DB_IMPL", "duckdb+parquet")  # skip SQLite
 
 import pathlib
 from typing import List
