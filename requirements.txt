@@ -23,7 +23,7 @@ langchain==0.2.1
 langchain-community==0.2.1
 langchain-openai==0.1.7
 crewai
-chromadb
+chromadb>=0.5.0
 sentence-transformers
 
 # ───────── Finance APIs ──────────────────────────────────
