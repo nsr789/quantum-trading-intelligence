@@ -140,3 +140,17 @@ def generate_report(ticker: str) -> str:
     crew = Crew(agents=[sentiment_agent, macro_agent, val_agent, editor], tasks=tasks, llm=llm)
     result = crew.kickoff()
     return str(getattr(result, "raw", result)).strip()
+
+def fundamentals(ticker: str) -> Dict[str, str | float]:
+    """Return lite fundamentals dict, swallow network/ratelimit errors."""
+    try:
+        info = yf.Ticker(ticker).info
+        return {
+            "ttm_pe":      info.get("trailingPE"),
+            "rev_growth":  info.get("revenueGrowth"),
+            "sector":      info.get("sector"),
+        }
+    except Exception as exc:
+        # structlog expects %-style or key/value pairs – avoid {} formatting
+        log.warning("fundamentals_fetch_failed", error=str(exc))
+        return {}
