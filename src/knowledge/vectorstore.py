@@ -1,12 +1,7 @@
 # ── src/knowledge/vectorstore.py ─────────────────────────────────────────────
 """
-Persistent Chroma vector-store (new client API, no legacy config clashes).
-
-* Uses SentenceTransformerEmbeddingFunction → object has name()/version()
-* If a legacy collection exists with a conflicting embedding config,
-  it is deleted and recreated automatically – avoids AttributeError.
-* Falls back to an in-memory client when the filesystem is read-only
-  (Streamlit Community Cloud edge-case).
+Persistent Chroma vector-store compatible with the *new* Chroma client
+(avoids legacy-config & embedding-function conflicts).
 """
 
 from __future__ import annotations
@@ -17,7 +12,7 @@ import chromadb
 from chromadb.config import Settings
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
-# --------------------------------------------------------------------------- #
+# --- locations & embedding function ----------------------------------------
 ROOT        = Path(__file__).resolve().parents[2]
 STORE_PATH  = ROOT / ".cache" / "chroma"
 STORE_PATH.mkdir(parents=True, exist_ok=True)
@@ -37,33 +32,28 @@ def _seed_docs() -> List[dict]:
     ]
 
 
+# ---- client helpers --------------------------------------------------------
 def _get_client() -> chromadb.api.ClientAPI:
-    """Writable persistent client, else in-memory fallback."""
+    """Writable persistent client; falls back to in-memory on read-only FS."""
     try:
         return chromadb.PersistentClient(
             path=str(STORE_PATH),
             settings=Settings(allow_reset=True),
         )
     except RuntimeError:
-        # Read-only FS (Streamlit Cloud) → use in-memory client
+        # Streamlit Community Cloud uses a read-only filesystem
         return chromadb.Client(Settings(allow_reset=True))
 
 
-# --------------------------------------------------------------------------- #
+# ---- public loader ---------------------------------------------------------
 def load_vectorstore():
     client = _get_client()
 
-    # --------------------------------------------------------------------- #
-    # 1️⃣  Ensure a clean collection with the *correct* embedding function
-    # --------------------------------------------------------------------- #
+    # 1. ensure collection has the correct embedding-function config
     try:
         col = client.get_collection("company_docs")
-        # If an old collection was created with the default embedding config,
-        # its persisted config won't match our EMBED object → ValueError.
-        # Access a property to trigger validation immediately:
-        _ = col.count()
+        _ = col.count()            # triggers config validation
     except Exception:
-        # Either collection doesn’t exist OR embedding config mismatched.
         if "company_docs" in [c.name for c in client.list_collections()]:
             client.delete_collection("company_docs")
         col = client.create_collection(
@@ -71,9 +61,7 @@ def load_vectorstore():
             embedding_function=EMBED,
         )
 
-    # --------------------------------------------------------------------- #
-    # 2️⃣  Seed tiny demo corpus once
-    # --------------------------------------------------------------------- #
+    # 2. seed a tiny demo corpus once
     if col.count() == 0:
         docs = _seed_docs()
         col.add(
