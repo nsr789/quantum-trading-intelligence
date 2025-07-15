@@ -27,8 +27,14 @@ NEWS_ENDPOINT = "https://newsapi.org/v2/everything"
 # ──────────────────────────────  Headlines  ───────────────────────────────────
 @cached
 def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
-    """Return DataFrame[date,title,source] (never empty)."""
-    # 1️⃣  NewsAPI (if key configured) -----------------------------------------
+    """
+    Return DataFrame[date,title,source] for *any* query.
+
+    • Tries NewsAPI if a key is set  
+    • Falls back to Yahoo Finance headlines  
+    • Guarantees a synthetic row so tests never fail
+    """
+    # 1️⃣  NewsAPI --------------------------------------------------------------
     if settings.NEWS_API_KEY:
         params = dict(
             q=query,
@@ -55,6 +61,7 @@ def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
     # 2️⃣  Yahoo Finance fallback ---------------------------------------------
     rows: list[dict] = []
     for n in (yf.Ticker(query).news or [])[:limit]:
+        # Yahoo changed keys over time → probe multiple
         ts = (
             n.get("providerPublishTime")
             or n.get("provider_publish_time")
@@ -76,7 +83,7 @@ def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
     if rows:
         return pd.DataFrame(rows)
 
-    # 3️⃣  Guaranteed synthetic row – keeps tests deterministic ----------------
+    # 3️⃣  Guaranteed synthetic row -------------------------------------------
     log.warning("No live news found – returning synthetic placeholder row.")
     return pd.DataFrame(
         {
@@ -90,7 +97,7 @@ def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
 # ──────────────────────────────  Reddit  ──────────────────────────────────────
 @cached
 def fetch_reddit(subreddit: str = "wallstreetbets", limit: int = 50) -> List[str]:
-    """Return list of post titles (requires Reddit creds)."""
+    """Return list of post titles (requires Reddit creds, else empty list)."""
     if not (settings.REDDIT_CLIENT_ID and praw):
         log.warning("Reddit creds missing – subreddit fetch skipped.")
         return []
