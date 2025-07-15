@@ -1,18 +1,14 @@
-"""Market-data helpers.
-
-* 100 % local dependencies → yfinance (always works, no key required)
-* Optionally enrich with AlphaVantage / Finnhub if their keys are set.
-"""
+"""Market-data helpers (prices + fundamentals)."""
 
 from __future__ import annotations
 
 import asyncio
+import warnings
 from datetime import date, datetime
 from typing import Dict, List
 
 import pandas as pd
 import yfinance as yf
-
 
 try:
     from alpha_vantage.fundamentaldata import FundamentalData  # type: ignore
@@ -28,11 +24,10 @@ from src.config.settings import settings
 from src.data.cache import cached
 from src.utils.logging import get_logger
 
-log = get_logger(module="market")
-import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="yfinance")
+log = get_logger(module="market")
 
-# ── price history ─────────────────────────────────────────────────────────────
+# ───────────────────────── price history ─────────────────────────────────────
 @cached
 def get_price_history(
     ticker: str,
@@ -43,7 +38,13 @@ def get_price_history(
     """Return OHLCV dataframe (uses yfinance)."""
     end = end or date.today()
     df = yf.download(
-        ticker, start=start, end=end, interval=interval, group_by="column", auto_adjust=False
+        ticker,
+        start=start,
+        end=end,
+        interval=interval,
+        group_by="column",
+        auto_adjust=False,
+        progress=False,
     )
     if isinstance(df.columns, pd.MultiIndex):
         df = df.xs(ticker, level=1, axis=1)  # keep single-level columns
@@ -53,16 +54,10 @@ def get_price_history(
     return df
 
 
-# ── fundamentals (multi-provider) ─────────────────────────────────────────────
+# ───────────────────────── fundamentals (multi-provider) ─────────────────────
 @cached
 def get_fundamentals(ticker: str) -> Dict[str, float | str]:
-    """Return lightweight fundamentals dict.
-
-    Order of preference:
-    1. AlphaVantage (`overview` endpoint)    – rich & fast
-    2. Finnhub (`company_basic_financials`) – also good
-    3. yfinance `.info`                     – public fallback
-    """
+    """Return lightweight fundamentals dict (AlphaVantage → Finnhub → yfinance)."""
     if settings.ALPHAVANTAGE_API_KEY and FundamentalData:
         fd = FundamentalData(settings.ALPHAVANTAGE_API_KEY)
         data, _ = fd.get_company_overview(ticker)
@@ -87,8 +82,7 @@ def get_fundamentals(ticker: str) -> Dict[str, float | str]:
                 "ProfitMargin": basic.get("netProfitMarginTTM", 0.0),
             }
 
-    # fallback
-    info = yf.Ticker(ticker).info
+    info = yf.Ticker(ticker).info  # public fallback
     return {
         "MarketCap": info.get("marketCap"),
         "PERatio": info.get("trailingPE"),
@@ -98,12 +92,15 @@ def get_fundamentals(ticker: str) -> Dict[str, float | str]:
     }
 
 
-# ── async batch helper ────────────────────────────────────────────────────────
-async def _fetch_one(ticker: str, start: str, end: str, interval: str) -> pd.DataFrame:
+# ───────────────────────── async batch helper ────────────────────────────────
+async def _fetch_one(
+    ticker: str,
+    start: str,
+    end: str,
+    interval: str,
+) -> pd.DataFrame:
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None, get_price_history, ticker, start, end, interval
-    )
+    return await loop.run_in_executor(None, get_price_history, ticker, start, end, interval)
 
 
 async def get_price_batch(
@@ -112,7 +109,15 @@ async def get_price_batch(
     end: str | date | None = None,
     interval: str = "1d",
 ) -> Dict[str, pd.DataFrame]:
-    """Fetch multiple tickers in parallel (thread-pool)."""
+    """Fetch multiple tickers concurrently; always returns **all** keys."""
     coros = [_fetch_one(t, start, end, interval) for t in tickers]
     data = await asyncio.gather(*coros, return_exceptions=True)
-    return {t: d for t, d in zip(tickers, data) if isinstance(d, pd.DataFrame)}
+
+    out: Dict[str, pd.DataFrame] = {}
+    for t, d in zip(tickers, data):
+        if isinstance(d, Exception):
+            log.warning("price history fetch failed for %s: %s", t, d)
+            out[t] = pd.DataFrame()  # placeholder keeps key present
+        else:
+            out[t] = d
+    return out
