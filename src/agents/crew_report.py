@@ -141,6 +141,7 @@ def generate_report(ticker: str) -> str:
     result = crew.kickoff()
     return str(getattr(result, "raw", result)).strip()
 
+
 def fundamentals(ticker: str) -> Dict[str, str | float]:
     """Return lite fundamentals dict, swallow network/ratelimit errors."""
     try:
