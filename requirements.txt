@@ -6,6 +6,12 @@ scikit-learn>=1.4
 skl2onnx>=1.16
 textblob>=0.18
 transformers>=4.41
+# ─── ML back-ends ───────────────────────────────
+torch>=2.2         # CPU wheel
+xgboost>=2.0
+onnxmltools        # scikit-→ONNX converter for XGB
+optimum            # quick PyTorch→ONNX export helper
+
 
 # ───────── Core ───────────────────────────────────────────
 pandas
