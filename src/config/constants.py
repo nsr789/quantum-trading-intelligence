@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-DEFAULT_TICKERS = ["AAPL", "MSFT", "AMZN", "GOOGL", "TSLA"]
+DEFAULT_TICKERS = [
+    "AAPL", "MSFT", "AMZN", "GOOGL", "TSLA",
+    "NVDA", "META", "AVGO", "NFLX", "COST",
+    "PLTR", "ASML", "CSCO", "TMUS", "AMD",
+    "LIN", "AZN", "INTU", "TXN", "BKNG"
+]
 SUPPORTED_INTERVALS = ["1d", "1wk", "1mo"]
 MAX_CANDLE_POINTS = 5_000  # plotly down-sample guard
 SENTIMENT_ROLLING_WINDOW = 7  # days
