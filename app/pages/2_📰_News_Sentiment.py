@@ -8,6 +8,7 @@ import streamlit as st
 import plotly.express as px
 from src.data.news import fetch_news
 from src.agents.tools import company_news_sentiment
+from src.config.constants import DEFAULT_TICKERS
 
 st.markdown("# 📰 News Sentiment")
 
