@@ -5,9 +5,9 @@ Factory that exposes the rule-based strategies available to the Back-tester.
 """
 
 from .mean_reversion import MeanReversion
-from .momentum import MomentumStrategy
+from .momentum import Momentum
 
 STRATEGY_MAP = {
     "Mean Reversion": MeanReversion,
-    "Momentum":       MomentumStrategy,
+    "Momentum":       Momentum,
 }
