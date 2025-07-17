@@ -1,6 +1,7 @@
 # Quantum Trading Intelligence 🧠📈  
-*A lightweight research cockpit that ingests market & macro data, synthesises insights with multi‑agent LLMs, and lets you **test or forecast** trading ideas – all from a single Streamlit UI.*
+*An end-to-end lightweight research cockpit that ingests market & macro data, synthesises insights with multi‑agent LLMs, and lets you **test or forecast** trading ideas – all from a single Streamlit UI.*
 
+🚀 **[Live Demo](https://quantum-trading-intelligence.streamlit.app/)** 
 ---
 
 ## 📌 Table of Contents
