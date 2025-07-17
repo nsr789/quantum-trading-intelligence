@@ -13,19 +13,19 @@ from typing import Literal, Sequence
 import numpy as np
 import onnxruntime as ort
 import pandas as pd
-from sklearn.linear_model import LinearRegression  # used by fallback
+from sklearn.linear_model import LinearRegression  # fallback trainer
 
 from src.data.market import get_price_history
 from src.utils.logging import get_logger
 
 Engine = Literal["linear", "xgb", "lstm"]
-
 MODEL_DIR = Path(__file__).resolve().parent / "models"
+
 log = get_logger(module="predictor")
 
 
 class PricePredictor:
-    """Runtime inference helper – **no training** except for the fallback."""
+    """Runtime inference helper — trains only when ONNX is missing."""
 
     # ------------------------------------------------------------------ #
     def __init__(self, ticker: str, window: int = 30, engine: Engine = "linear"):
@@ -37,6 +37,7 @@ class PricePredictor:
         self.scaler_mu = MODEL_DIR / f"scaler-{window}.npy"
         self.scaler_sd = MODEL_DIR / f"scale-{window}.npy"
 
+        # --- load model or fallback ------------------------------------
         if self.onnx_path.exists():
             self._sess = ort.InferenceSession(str(self.onnx_path))
             log.info("ONNX model loaded: %s", self.onnx_path.name)
@@ -44,13 +45,14 @@ class PricePredictor:
             log.warning("ONNX model for %s not found – training fallback.", self.engine)
             self._train_fallback()
 
-        # price history once per instance
+        # --- get price history once per instance -----------------------
         self.series = get_price_history(self.ticker, interval="1d")["Close"]
 
+        # --- load scaler if present ------------------------------------
         if self.scaler_mu.exists() and self.scaler_sd.exists():
             self.mean_ = np.load(self.scaler_mu)
             self.scale_ = np.load(self.scaler_sd)
-        else:  # allow LSTM or fresh fallback
+        else:
             self.mean_ = None
             self.scale_ = None
 
@@ -58,34 +60,38 @@ class PricePredictor:
     # helpers
     def _windowed(self) -> np.ndarray:
         """Return last `window` closes as (1, window) float32 tensor."""
-        arr = self.series.iloc[-self.window :].values.astype(np.float32).reshape(1, -1)
+        x = self.series.iloc[-self.window :].values.astype(np.float32).reshape(1, -1)
         if self.mean_ is not None:
-            arr = (arr - self.mean_) / self.scale_
-        return arr
+            x = (x - self.mean_) / self.scale_
+        return x
 
     # ------------------------------------------------------------------ #
     # inference
     def predict_next_close(self) -> float:
-        if hasattr(self, "_sess"):  # ONNX path
-            inputs = {self._sess.get_inputs()[0].name: self._windowed()}
-            return float(self._sess.run(None, inputs)[0].item())
+        if hasattr(self, "_sess"):
+            inp = {self._sess.get_inputs()[0].name: self._windowed()}
+            return float(self._sess.run(None, inp)[0].item())
 
-        # fallback linear reg
+        # linear-regression fallback
         x = self._windowed().ravel()
         return float(self._coef_ @ x + self._bias_)
 
     def predict_series(self, horizon: int = 5) -> pd.Series:
-        """Very rough recursive forecast for `horizon` business days."""
+        """Naïve recursive forecast for `horizon` business days."""
         preds: list[float] = []
         temp = self.series.copy()
+
         for _ in range(horizon):
-            self.series = temp  # sliding window
+            self.series = temp
             nxt = self.predict_next_close()
             preds.append(nxt)
             temp = pd.concat([temp, pd.Series([nxt])])
 
-        idx = pd.date_range(start=self.series.index[-1] + pd.Timedelta(days=1),
-                            periods=horizon, freq="B")
+        idx = pd.date_range(
+            start=self.series.index[-1] + pd.Timedelta(days=1),
+            periods=horizon,
+            freq="B",
+        )
         return pd.Series(preds, index=idx, name="forecast")
 
     # ------------------------------------------------------------------ #
