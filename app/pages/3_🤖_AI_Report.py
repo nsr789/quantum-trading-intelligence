@@ -7,7 +7,7 @@ from src.agents.crew_report import generate_report
 from src.config.constants import DEFAULT_TICKERS
 
 st.markdown("# 🤖 AI Research Report")
-ticker = st.text_input("Ticker", "AAPL")
+ticker = st.selectbox("Ticker", DEFAULT_TICKERS, index=0)
 if st.button("Run AI analysis"):
     with st.spinner("Thinking..."):
         report_md = generate_report(ticker)
