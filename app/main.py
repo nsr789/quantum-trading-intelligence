@@ -40,10 +40,10 @@ Here’s what each page does:
 
 | Page | Purpose |
 |------|---------|
-| **📈 Price Dashboard** | Interactive OHLCV candlestick chart with optional SMA-20 / SMA-50 overlays for *any* US-listed ticker. |
+| **📈 Price Dashboard** | Interactive OHLCV candlestick chart with optional SMA-20 / SMA-50 overlays. |
 | **📰 News Sentiment** | Fetches the latest headlines, classifies tone *(positive / neutral / negative)*, and shows a sentiment pie. |
 | **🤖 AI Research Report** | CrewAI (4 agents) synthesises news, macro, and valuation data into a five-bullet research note — cached to save tokens. |
-| **🔮 Forecast** | LSTM model trained on the selected ticker; displays next-day price forecast plus MAE / RMSE metrics. |
+| **🔮 Forecast** | LSTM model trained on the selected ticker; displays next-day price forecast. |
 | **🧪 Strategy Back-tester** | Runs **rule-based** strategies — *Mean-Reversion* and *Momentum* — then reports return, Sharpe, hit-rate & equity curve. |
 | **💬 Company Q&A** | Two-agent RAG chatbot (CrewAI + ChromaDB) that answers arbitrary company questions over an embedded knowledge base. |
 """
