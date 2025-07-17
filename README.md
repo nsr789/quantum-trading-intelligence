@@ -1,20 +1,19 @@
 # Quantum Trading Intelligence 🧠📈  
-*A lightweight research cockpit that ingests market & macro data, computes
-signals, and orchestrates multi-agent LLM reasoning.*
+*A lightweight research cockpit that ingests market & macro data, synthesises insights with multi‑agent LLMs, and lets you **test or forecast** trading ideas – all from a single Streamlit UI.*
 
 ---
 
 ## 📌 Table of Contents
 1. [Project Overview](#project-overview)  
-2. [High-Level Architecture](#high-level-architecture)  
+2. [High‑Level Architecture](#high-level-architecture)  
 3. [🔄 Agent Workflow Diagrams](#agent-workflow-diagrams)  
 4. [Technology Stack](#technology-stack)  
 5. [Project Structure](#project-structure)  
 6. [Setup & Installation](#setup--installation)  
 7. [Usage Guide](#usage-guide)  
 8. [Component Documentation](#component-documentation)  
-9. [API-Ready Functions](#api-ready-functions)  
-10. [Real-World Applications](#real-world-applications)  
+9. [API‑Ready Functions](#api-ready-functions)  
+10. [Real‑World Applications](#real-world-applications)  
 11. [Contributing](#contributing)  
 12. [Troubleshooting](#troubleshooting)
 
@@ -23,40 +22,50 @@ signals, and orchestrates multi-agent LLM reasoning.*
 ## Project Overview
 | | |
 |---|---|
-| **Goal** | data ingestion ➜ analytics ➜ multi-agent LLM output. |
-| **Features** | • Live price dashboard   • Macro snapshot   • Multi-agent GPT research note   • Strategy back-tester   • Company Q&A RAG chatbot |
+| **Goal** | end‑to‑end pipeline → _data ingestion → analytics & forecasting → multi‑agent reasoning → trade simulation_. |
+| **What you get** | • Live price dashboard   • News sentiment pie   • 4‑agent AI research note   • LSTM forecasting sandbox   • Rule‑based back‑tester   • Company Q&A chatbot |
 
 ---
 
-## High-Level Architecture
+## High‑Level Architecture
 ```mermaid
 flowchart TD
     subgraph UI
         PD["📈 Price Dashboard"]
-        MS["📊 Macro Snapshot"]
-        RP["🤖 AI Report (multi-agent)"]
-        BT["🧪 Back-tester"]
+        NS["📰 News Sentiment"]
+        FC["🔮 Forecast (LSTM)"]
+        BT["🧪 Back‑tester"]
+        RP["🤖 AI Report"]
         QA["💬 Company Q&A"]
     end
 
-    PD --> MarketData[("Market Data<br>yfinance")]
-    BT --> StrategyEng["Strategy Engine"]
+    PD --> MarketData[(yfinance)]
+    NS --> NewsAPI[(News API)]
+    FC --> MarketData
+    FC --> MLModels[(ONNX & PyTorch LSTM)]
+    BT --> StrategyEng["Rule‑based Strategy Engine"]
     StrategyEng --> MarketData
+
     RP --> CrewReport["Crew Report"]
     QA --> CrewRAG["Crew RAG"]
 
-    %% arrow: macro snapshot to macro API
-    MS --> MacroAPI[(FRED API)]
+    %% macro
+    MacroAPI[(FRED API)]
+    RP --> MacroAPI
+    RP --> MarketData
+    RP --> NewsAPI
 
-    CrewReport -->|fundamentals| MarketData
-    CrewReport -->|news| NewsAPI[(News API)]
-    CrewReport -->|macro| MacroAPI
     CrewReport --> LLMGateway["LLM Gateway"]
     CrewRAG --> VectorStore["Chroma DB"]
     CrewRAG --> LLMGateway
-    LLMGateway -.-> OpenAI[(OpenAI/Groq)]
+    LLMGateway -.-> OpenAI[(OpenAI / Groq)]
     LLMGateway -.-> Dummy[(Offline DummyLLM)]
-    CrewReport --> Cache[[Joblib Cache]]
+
+    %% caching layer
+    subgraph CacheLayer
+        Cache[[Joblib Cache]]
+    end
+    MarketData --> Cache
     NewsAPI --> Cache
     MacroAPI --> Cache
 ```
@@ -64,34 +73,35 @@ flowchart TD
 ---
 
 ## Agent Workflow Diagrams
-### 🤖 AI Report — 4-Agent CrewAI Pipeline
+
+### 🤖 AI Report – 4‑Agent CrewAI Pipeline
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Sentiment     as "Sentiment Analyst"
-    participant Macro         as "Macro Analyst"
-    participant Valuation     as "Valuation Analyst"
-    participant Editor        as "Senior Editor"
+    participant U as User
+    participant S as "Sentiment Analyst"
+    participant M as "Macro Analyst"
+    participant V as "Valuation Analyst"
+    participant E as "Senior Editor"
 
-    User->>Sentiment: headline sentiment data
-    User->>Macro: unemployment + CPI
-    User->>Valuation: P/E & revenue growth
+    U->>S: latest headline sentiment
+    U->>M: CPI & unemployment
+    U->>V: P/E & growth metrics
 
-    Sentiment-->>Editor: sentiment insight
-    Macro-->>Editor: macro context
-    Valuation-->>Editor: valuation view
+    S-->>E: sentiment insight
+    M-->>E: macro context
+    V-->>E: valuation view
 
-    Editor-->>User: 5-bullet markdown note
+    E-->>U: 5‑bullet markdown note
 ```
 
-### 💬 Company Q&A — 2-Agent RAG Crew
+### 💬 Company Q&A – 2‑Agent RAG Crew
 ```mermaid
 graph LR
-    U["User question"] --> R[Researcher]
-    R -->|query| V[Chroma Vector Store]
-    V -->|context| R
+    Q["User question"] --> R[Researcher]
+    R -->|query| VS[Chroma Vector Store]
+    VS -->|context| R
     R --> A[Analyst]
-    A --> UAns["Answer"]
+    A --> Ans["Answer"]
 ```
 
 ---
@@ -101,12 +111,12 @@ graph LR
 |-------|------|
 | UI / Viz | **Streamlit**, Plotly |
 | Data wrangling | pandas, NumPy |
-| ML / DL | scikit-learn, XGBoost, PyTorch, ONNX |
+| Forecasting | PyTorch LSTM, scikit‑learn, XGBoost, ONNX |
 | LLM orchestration | **LangChain**, **CrewAI**, OpenAI / Groq |
-| Vector store | **ChromaDB** + MiniLM sentence-transformers |
-| Finance & macro APIs | yfinance, fredapi, NewsAPI, Finnhub, PRAW |
-| Strategy engine | custom vectorised back-tester |
-| Ops | joblib cache, structlog, loguru, pytest, ruff, black |
+| Vector store | **ChromaDB** + MiniLM sentence‑transformers |
+| Finance & macro APIs | yfinance, FRED, NewsAPI, Finnhub, PRAW |
+| Strategy engine | vectorised mean‑reversion & SMA‑momentum |
+| Ops & tooling | joblib cache, structlog, loguru, pytest, ruff, black |
 
 ---
 
@@ -117,16 +127,17 @@ quantum-trading-intelligence
 │  ├─ main.py
 │  └─ pages/
 │     ├─ 1_📈_Price_Dashboard.py
-│     ├─ 2_📊_Macro_Snapshot.py
+│     ├─ 2_📰_News_Sentiment.py
 │     ├─ 3_🤖_AI_Report.py
-│     ├─ 4_🧪_Backtest_Strategies.py
-│     └─ 5_💬_Company_QA.py
+│     ├─ 4_🔮_Forecast.py
+│     ├─ 5_🧪_Backtest_Strategies.py
+│     └─ 6_💬_Company_QA.py
 ├─ src/
 │  ├─ agents/          # CrewAI pipelines
 │  ├─ data/            # loaders & caching
-│  ├─ knowledge/       # Chroma vector-store
-│  ├─ strategies/      # trading strategies
-│  ├─ ml/              # ML models (ONNX)
+│  ├─ knowledge/       # Chroma vector‑store
+│  ├─ strategies/      # rule‑based strategies
+│  ├─ ml/              # LSTM + ONNX models
 │  └─ utils/           # LLM gateway, logging
 └─ tests/              # 18 pytest cases
 ```
@@ -139,9 +150,9 @@ git clone https://github.com/nsr789/quantum-trading-intelligence.git
 cd quantum-trading-intelligence
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env              # add OPENAI_API_KEY / GROQ_API_KEY if available
+cp .env.example .env     # add OPENAI_API_KEY / GROQ_API_KEY if you have them
 streamlit run app/main.py
-pytest -q                         # 18 passed
+pytest -q                # ⇢ 18 passed
 ```
 
 ---
@@ -149,39 +160,42 @@ pytest -q                         # 18 passed
 ## Usage Guide
 | Page | What you get |
 |------|--------------|
-| 📈 **Price Dashboard** | OHLCV visualization & indicators |
-| 📊 **Macro Snapshot** | CPI, unemployment, Fed funds charts |
-| 🤖 **AI Report** | 5-bullet multi-agent GPT note (cached) |
-| 🧪 **Back-tester** | Mean-reversion & SMA momentum results |
-| 💬 **Company Q&A** | RAG chatbot over Chroma context |
+| 📈 **Price Dashboard** | OHLCV chart & moving averages |
+| 📰 **News Sentiment** | Tone breakdown of latest headlines |
+| 🤖 **AI Report** | 5‑bullet multi‑agent GPT note (cached) |
+| 🔮 **Forecast** | LSTM next‑day price + MAE / RMSE |
+| 🧪 **Back‑tester** | Mean‑reversion & SMA momentum P&L |
+| 💬 **Company Q&A** | RAG chatbot over vector store |
 
 ---
 
 ## Component Documentation
 | Module | Purpose |
 |--------|---------|
-| `agents/crew_report.py` | 4-agent CrewAI note generator; uses news, macro, fundamentals; cached. |
-| `utils/llm.py` | Provider-agnostic streaming (OpenAI, Groq, Dummy). |
-| `knowledge/vectorstore.py` | Persistent Chroma collection; seeds small company corpus; MiniLM embeddings. |
-| `strategies/*` | Vectorised back-test framework. |
-| `data/cache.py` | `joblib.Memory`, 24‑h TTL cache. |
+| `agents/crew_report.py` | 4‑agent CrewAI report generator (cached) |
+| `ml/lstm.py` | PyTorch LSTM, exported to ONNX for fast inference |
+| `agents/forecast.py` | Streamlit page wrapper for LSTM forecast |
+| `knowledge/vectorstore.py` | Persistent Chroma collection (MiniLM) |
+| `strategies/*` | Vectorised back‑test framework |
+| `data/cache.py` | `joblib.Memory`, 24‑h TTL cache |
 
 ---
 
-## API-Ready Functions
+## API‑Ready Functions
 | Function | Output | Description |
 |----------|--------|-------------|
-| `generate_report(ticker)` | `str` | 5-bullet AI note (cached). |
-| `qa_with_crew(question, ticker)` | `str` | CrewAI RAG answer. |
-| `get_price_history(...)` | `DataFrame` | OHLCV via yfinance. |
-| `backtest(...)` | `dict` | Equity curve & Sharpe. |
+| `generate_report(ticker)` | `str` | 5‑bullet AI note (cached) |
+| `forecast_price(ticker)` | `dict` | next‑day price ŷ, MAE, RMSE |
+| `qa_with_crew(question, ticker)` | `str` | CrewAI RAG answer |
+| `get_price_history(...)` | `DataFrame` | OHLCV via yfinance |
+| `backtest(...)` | `dict` | equity curve & Sharpe |
 
 ---
 
-## Real-World Applications
-* Sell-side *“first-look”* research assistant  
-* Retail‑trader dashboard with AI commentary  
-* Teaching lab for LLM orchestration on constrained hardware
+## Real‑World Applications
+* Sell‑side *“first‑look”* research assistant  
+* Retail‑trader dashboard with AI commentary + forecast  
+* Teaching lab for LLM & DL orchestration on modest hardware
 
 ---
 
@@ -195,8 +209,7 @@ pytest -q                         # 18 passed
 ## Troubleshooting
 | Issue | Fix |
 |-------|-----|
-| **429 RateLimit** | new key or wait; fallback still works |
-| Import error `src` | `pip install -e .` |
+| **429 RateLimit** | new key or wait – fallback still works |
 | Chroma lock (Windows) | `export CHROMA_DB_IMPL=duckdb+parquet` |
 | Pydantic warnings | harmless; upstream change |
 
