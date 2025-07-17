@@ -17,7 +17,7 @@ col1, col2 = st.columns(2)
 with col1:
     ticker = st.selectbox("Ticker", DEFAULT_TICKERS, 0)
 with col2:
-    strat_name = st.selectbox("Strategy", list(STRATEGY_MAP))
+    strat_name = st.selectbox("Strategy", list(STRATEGY_MAP.keys()), 0)
 
 start = st.date_input("Start date", value=pd.to_datetime("2023-01-01"))
 run = st.button("Run back-test")
