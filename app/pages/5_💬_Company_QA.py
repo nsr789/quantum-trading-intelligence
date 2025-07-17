@@ -8,7 +8,7 @@ from src.knowledge.vectorstore import load_vectorstore
 from src.agents.crew_rag import qa_with_crew
 from src.config.constants import DEFAULT_TICKERS
 
-st.markdown("# 💬 Company Q&A (CrewAI + Chroma)")
+st.markdown("# 💬 Company Q&A")
 
 ticker = st.selectbox("Ticker", DEFAULT_TICKERS, 0)
 question = st.text_input("Ask a question about the company", "What does the company do?")
