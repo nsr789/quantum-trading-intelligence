@@ -9,13 +9,12 @@ loguru
 pydantic-settings>=2.0
 
 # ───────── Machine-Learning / DL ─────────────────────────
-torch                      # CPU-only
+torch                      # CPU-only – used by the LSTM strategy
 scikit-learn
 xgboost
 onnx
 onnxruntime
-skl2onnx
-tensorflow-cpu>=2.15       # ← NEW – optional, tiny wheel (≈60 MB)
+skl2onnx                  # (optional) convert classical models to ONNX
 
 # ───────── LLM & Vector Stack ────────────────────────────
 openai>=1.12
