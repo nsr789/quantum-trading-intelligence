@@ -9,8 +9,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 # ---------------------------------------------------------------------------
 
-"""📈  Price Dashboard – interactive OHLC chart with SMA overlays."""
-
 import re
 from datetime import datetime, timezone
 from typing import Final
