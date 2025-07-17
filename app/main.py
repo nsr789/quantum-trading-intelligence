@@ -28,7 +28,14 @@ with st.sidebar:
 """
     )
     st.write("---")
-    st.markdown("Built by **Satwik Nallamilli** ⚡")
+    st.markdown(
+        """
+**Developed by Satwik Nallamilli** ⚡  
+[LinkedIn](https://www.linkedin.com/in/satwik-nallamilli-358397218/)  
+[GitHub](https://github.com/nsr789)  
+📧 ssn9@illinois.edu
+"""
+    )
 
 # ───────────────────────────── Main content ──────────────────────────────────
 st.title("🧠 Quantum Trading Intelligence")
