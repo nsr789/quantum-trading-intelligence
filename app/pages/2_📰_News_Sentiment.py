@@ -11,7 +11,7 @@ from src.agents.tools import company_news_sentiment
 
 st.markdown("# 📰 News Sentiment")
 
-ticker = st.text_input("Ticker / Query", value="AAPL")
+ticker = st.selectbox("Ticker", DEFAULT_TICKERS, index=0)
 limit = st.slider("Headlines", 10, 50, 20)
 if st.button("Analyse"):
     df = fetch_news(ticker, limit)
