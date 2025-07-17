@@ -1,18 +1,14 @@
-"""Public strategy registry."""
-from .base import Strategy                 # noqa: F401 (re-export)
+# src/strategies/__init__.py
+"""
+Factory that exposes the rule-based strategies available to the Back-tester.
+LSTM has been removed – only Mean-Reversion & Momentum remain.
+"""
 
-# existing rule-based strategies
-from .mean_reversion import MeanReversion
-from .momentum        import Momentum
+from .mean_reversion import MeanReversionStrategy
+from .momentum import MomentumStrategy
 
-# ▶ NEW
-from .lstm            import LSTMStrategy
-
-# a single dict the UI & tests import
+# Public map used by the Back-tester page
 STRATEGY_MAP = {
-    "Mean-Reversion": MeanReversion,
-    "Momentum":       Momentum,
-    "LSTM":           LSTMStrategy,        # <-- integrated
+    "Mean Reversion": MeanReversionStrategy,
+    "Momentum": MomentumStrategy,
 }
-
-__all__ = ["STRATEGY_MAP", "MeanReversion", "Momentum", "LSTMStrategy"]
