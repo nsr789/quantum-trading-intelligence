@@ -8,8 +8,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 # -----------------------------------------------------------------------------
 
-"""🔮 Price Forecast – quick LSTM/XGBoost forecasting demo."""
-
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
