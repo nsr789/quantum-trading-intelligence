@@ -1,4 +1,4 @@
-# Quantum Trading Intelligence 🧠📈  
+# AI-Powered Trading Intelligence Platform 🧠📈  
 *An end-to-end lightweight research cockpit that ingests market & macro data, synthesises insights with multi‑agent LLMs, and lets you **test or forecast** trading ideas – all from a single Streamlit UI.*
 
 ---
