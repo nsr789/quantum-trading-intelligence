@@ -1,19 +1,44 @@
-# ─────────── src/forecast/linear_forecaster.py
+"""
+src/forecast/linear_forecaster.py
+A feather-weight Ordinary-Least-Squares forecaster.
+
+* No external GPU / heavy deps
+* Learns a linear trend over the last *lookback* bars
+* Returns a list[float] of length *horizon*
+"""
 from __future__ import annotations
+
+from typing import Sequence
+
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
 
-def linear_regression_forecast(
-    series: pd.Series,
+def linear_forecast(                   # <-  ⚠  name must match __init__.py
+    series: pd.Series | Sequence[float],
+    *,
     horizon: int = 5,
+    lookback: int = 120,
 ) -> list[float]:
-    """OLS on time index ⇒ forecast."""
-    y = series.values.astype("float32")
-    X = np.arange(len(y), dtype="float32").reshape(-1, 1)
-    model = LinearRegression().fit(X, y)
+    """
+    Parameters
+    ----------
+    series   : price series (pd.Series or 1-D array-like)
+    horizon  : number of future steps to predict
+    lookback : window of recent observations to fit on
+    """
+    # ---------- data prep ----------------------------------------------------
+    s = np.asarray(series[-lookback:], dtype="float64")
+    X = np.arange(len(s)).reshape(-1, 1)           # time index 0 … lookback-1
+    y = s
 
-    X_fut = np.arange(len(y), len(y) + horizon, dtype="float32").reshape(-1, 1)
-    preds = model.predict(X_fut).tolist()
-    return preds
+    # ---------- model fit ----------------------------------------------------
+    model = LinearRegression()
+    model.fit(X, y)
+
+    # ---------- forecast -----------------------------------------------------
+    future_X = np.arange(len(s), len(s) + horizon).reshape(-1, 1)
+    y_hat = model.predict(future_X)
+
+    return y_hat.tolist()
