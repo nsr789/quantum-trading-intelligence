@@ -15,7 +15,7 @@ xgboost
 onnx
 onnxruntime
 skl2onnx                  # (optional) convert classical models to ONNX
-
+statsmodels
 # ───────── LLM & Vector Stack ────────────────────────────
 openai>=1.12
 groq>=0.4
