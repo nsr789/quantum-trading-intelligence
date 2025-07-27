@@ -1,4 +1,8 @@
 # app/main.py
+
+import os
+os.environ["STREAMLIT_FILE_WATCHER_TYPE"] = "poll"
+
 # --- project bootstrap (makes `src` importable) ------------------------------
 import sys, pathlib
 ROOT = pathlib.Path(__file__).resolve().parents[1]
