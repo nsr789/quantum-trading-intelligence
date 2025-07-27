@@ -1,4 +1,4 @@
-# ─────────── src/forecast/arima_forecaster.py  (drop-in replacement)
+# ─────────── src/forecast/arima_forecaster.py
 from __future__ import annotations
 
 from typing import List
@@ -17,29 +17,19 @@ def arima_forecast(
     **_,
 ) -> List[float]:
     """
-    Generic ARIMA / SARIMA forecaster.
+    Lightweight ARIMA / SARIMA forecaster.
 
     Parameters
     ----------
-    series : pd.Series
-        Price series – **must be indexed by date** (any frequency).
-    horizon : int
-        Number of future steps to predict.
-    order : (p,d,q)
-        ARIMA order for non-seasonal part.
-    seasonal : bool
-        If True ➜ use SARIMAX with `seasonal_order`.
-    seasonal_order : (P,D,Q,s)
-        Seasonal component (ignored when `seasonal=False`).
-
-    Returns
-    -------
-    list[float]  – length == `horizon`
+    series         : price series (pd.Series, date-index)
+    horizon        : number of future steps to predict
+    order          : non-seasonal (p, d, q)
+    seasonal       : if True → use SARIMAX
+    seasonal_order : (P, D, Q, s) — ignored when *seasonal* is False
     """
     y = series.dropna().astype("float32")
 
     if seasonal:
-        # sensible default if caller didn’t specify
         seasonal_order = seasonal_order or (1, 0, 0, 5)
         model = SARIMAX(
             y,
@@ -48,9 +38,19 @@ def arima_forecast(
             enforce_stationarity=False,
             enforce_invertibility=False,
         )
-        res = model.fit()          # ← NO disp kwarg
+        res = model.fit()              # statsmodels ≥0.14 (no 'disp=' kwarg)
     else:
         model = ARIMA(y, order=order)
-        res = model.fit()          # ← NO disp kwarg
+        res = model.fit()              # same here – defaults are fine
 
     return res.forecast(steps=horizon).tolist()
+
+
+# ─────────────────────────── quick self-test ────────────────────────────
+if __name__ == "__main__":
+    import yfinance as yf
+
+    s = yf.download("AAPL", start="2024-01-01")["Close"]
+    print("ARIMA(5,1,0) ➜ next 3 values:", arima_forecast(s, horizon=3))
+    print("SARIMA(1,0,0)x(1,0,0,5) ➜ next 3 values:",
+          arima_forecast(s, horizon=3, seasonal=True))
