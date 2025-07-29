@@ -46,6 +46,5 @@ pytest-asyncio
 textblob
 # ───────── Transformer sentiment ─────────
 transformers>=4.41
-sentencepiece           # tokenizer support
 accelerate              # speeds CPU inference
 newspaper3k             # article scraping
