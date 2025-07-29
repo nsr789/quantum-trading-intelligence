@@ -47,4 +47,5 @@ textblob
 # ───────── Transformer sentiment ─────────
 transformers>=4.41
 accelerate              # speeds CPU inference
+lxml_html_clean
 newspaper3k             # article scraping
