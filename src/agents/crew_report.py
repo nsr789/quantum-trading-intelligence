@@ -1,78 +1,106 @@
-# ─────────────────────────── src/agents/crew_report.py ──────────────────────
+# ───────────────────────── src/agents/crew_report.py ─────────────────────────
 from __future__ import annotations
 
 import os
-from typing import Callable, Dict
+from typing import Callable, Dict, List
 
 import yfinance as yf
 from crewai import Agent, Crew, Task
 from langchain.schema import HumanMessage
 from langchain_openai import ChatOpenAI
+from textblob import TextBlob
 
-from src.data.cache import cached
-from src.data.macro import get_unemployment_rate
-from src.agents.tools import company_news_sentiment         # <- NEW
-from src.utils.llm   import chat_stream
+from src.agents.sentiment import transformer_sentiment         # NEW
+from src.data.cache   import cached
+from src.data.macro   import get_unemployment_rate
+from src.data.news    import fetch_news
+from src.utils.llm    import chat_stream
 from src.utils.logging import get_logger
 
 log = get_logger(module="crew_report")
 
-# ───────────────────────────── LLM helper ────────────────────────────────────
-def _dummy_llm(prompt: str) -> str:                       # offline fallback
+# ───────────────────────────── LLM helpers ───────────────────────────────────
+def _dummy_llm(prompt: str) -> str:  # offline fallback
     return "".join(chat_stream([HumanMessage(content=prompt)]))
 
 
 def _select_llm() -> Callable | ChatOpenAI:
     key = os.getenv("OPENAI_API_KEY")
     if key:
-        return ChatOpenAI(api_key=key,
-                          model_name="gpt-3.5-turbo-0125",
-                          temperature=0)
+        return ChatOpenAI(
+            api_key=key,
+            model_name="gpt-3.5-turbo-0125",
+            temperature=0,
+        )
     return _dummy_llm
 
 
-# ───────────────────── fundamentals helper (unchanged) ──────────────────────
+# ───────────────────────── fundamentals helper ───────────────────────────────
 def fundamentals(ticker: str) -> Dict[str, str | float]:
+    """Return lite fundamentals dict; swallow network/ratelimit errors."""
     try:
         info = yf.Ticker(ticker).info
         return {
-            "ttm_pe":     info.get("trailingPE"),
-            "rev_growth": info.get("revenueGrowth"),
-            "sector":     info.get("sector"),
+            "ttm_pe":      info.get("trailingPE"),
+            "rev_growth":  info.get("revenueGrowth"),
+            "sector":      info.get("sector"),
         }
-    except Exception as exc:                                 # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         log.warning("fundamentals_fetch_failed", error=str(exc))
         return {}
 
 
-# ──────────────────────────── main entry point ──────────────────────────────
-@cached           # joblib-cache so repeat tickers cost ≈0 tokens
-def generate_report(ticker: str) -> str:
+# ───────────────────────── sentiment helper (FinBERT) ────────────────────────
+def _headline_sentiment(headlines: List[str]) -> Dict[str, float]:
     """
-    5-bullet equity research note via CrewAI.
+    Classify `headlines` with FinBERT → proportional share.
 
-    * News sentiment: FinBERT on full articles → TextBlob fallback.
-    * Macro: latest unemployment.
-    * Valuation: lite fundamentals from yfinance.
+    Falls back to TextBlob polarity if transformer fails (e.g. cold start).
     """
-    # ---------- SENTIMENT ---------------------------------------------------
     try:
-        sent = company_news_sentiment(ticker, limit=30, full_article=True)
-    except Exception as exc:                                # noqa: BLE001
-        log.warning("finbert_failed_fallback_textblob", error=str(exc))
-        sent = company_news_sentiment(ticker, limit=30, full_article=False)
+        labels = transformer_sentiment(headlines)            # ProsusAI/FinBERT
+        share  = (
+            pd.Series(labels)
+            .value_counts(normalize=True)
+            .reindex(["positive", "negative", "neutral"])
+            .fillna(0.0)
+        )
+        return {k: round(v, 2) for k, v in share.items()}
+    except Exception as exc:  # transformer load / CUDA OOM / etc.
+        log.warning("FinBERT_failed_fallback_TextBlob", error=str(exc))
+        polar = pd.Series(headlines).map(
+            lambda t: TextBlob(str(t)).sentiment.polarity
+        )
+        pos = (polar >  0.10).mean()
+        neg = (polar < -0.10).mean()
+        neu = 1 - pos - neg
+        return {"positive": round(pos, 2), "negative": round(neg, 2), "neutral": round(neu, 2)}
 
-    # ---------- MACRO -------------------------------------------------------
+
+# ─────────────────────────────── main entry ──────────────────────────────────
+@cached  # joblib cache → repeat calls are free
+def generate_report(ticker: str) -> str:
+    """Return a 5-bullet markdown research note via CrewAI or heuristic fallback."""
+    import pandas as pd  # local import to avoid circular when cached
+
+    # ---------- NEWS SENTIMENT (FinBERT) ------------------------------------
+    news_df = fetch_news(ticker, limit=30)
+    if news_df.empty:
+        sentiment = {"positive": 0.0, "negative": 0.0, "neutral": 1.0}
+    else:
+        sentiment = _headline_sentiment(news_df["title"].tolist())
+
+    # ---------- MACRO --------------------------------------------------------
     macro = {"unemployment": get_unemployment_rate()}
 
-    # ---------- FUNDAMENTALS -----------------------------------------------
+    # ---------- FUNDAMENTALS -------------------------------------------------
     facts = fundamentals(ticker)
 
-    # ---------- OFFLINE FALLBACK (no API keys) ------------------------------
+    # ---------- FALLBACK if no LLM ------------------------------------------
     llm = _select_llm()
     if llm is _dummy_llm:
-        bias = max(sent, key=sent.get)
-        pos, neg, neu = [s * 100 for s in sent.values()]
+        bias = max(sentiment, key=sentiment.get)
+        pos, neg, neu = [s * 100 for s in sentiment.values()]
         return (
             f"- Overall news sentiment for **{ticker}** is *{bias}* "
             f"({pos:.0f}% ↑, {neg:.0f}% ↓, {neu:.0f}% →)\n"
@@ -82,19 +110,19 @@ def generate_report(ticker: str) -> str:
             "- Re-evaluate if negative share of headlines exceeds 30 %"
         )
 
-    # ---------- CrewAI agents ----------------------------------------------
+    # ---------- CrewAI agents -----------------------------------------------
     sentiment_agent = Agent(
         name="Sentiment Analyst",
         role="News-Sentiment Analyst",
         goal="Summarise headline sentiment",
-        backstory="Quantifies positive/negative tone from recent news.",
+        backstory="Quantifies positive/negative tone from news.",
         allow_delegation=False,
     )
     macro_agent = Agent(
         name="Macro Analyst",
         role="Macro Analyst",
         goal="Comment on macro backdrop",
-        backstory="Uses unemployment & CPI data.",
+        backstory="Access to unemployment & CPI data.",
         allow_delegation=False,
     )
     val_agent = Agent(
@@ -114,15 +142,12 @@ def generate_report(ticker: str) -> str:
 
     tasks = [
         Task(
-            description=f"Provide one sentence on news sentiment: {sent}",
+            description=f"Provide one sentence on news sentiment: {sentiment}",
             expected_output="Sentiment bullet",
             agent=sentiment_agent,
         ),
         Task(
-            description=(
-                f"Provide one sentence on macro backdrop "
-                f"(unemployment_rate={macro['unemployment']})"
-            ),
+            description=f"Provide one sentence on macro backdrop (unemployment={macro['unemployment']})",
             expected_output="Macro bullet",
             agent=macro_agent,
         ),
@@ -133,15 +158,21 @@ def generate_report(ticker: str) -> str:
         ),
         Task(
             description=(
-                "Combine the three analyst bullets into **exactly five** "
-                f"markdown bullet points that give market colour on {ticker}."
+                "Combine the three analyst bullets into **exactly five** markdown "
+                f"bullet points that give market colour on {ticker}."
             ),
             expected_output="5 markdown bullets",
             agent=editor,
         ),
     ]
 
-    crew   = Crew(agents=[sentiment_agent, macro_agent, val_agent, editor], tasks=tasks, llm=llm)
+    # NEW: use keyword arguments (crewai ≥0.4)
+    crew = Crew(
+        agents=[sentiment_agent, macro_agent, val_agent, editor],
+        tasks=tasks,
+        llm=llm,
+    )
 
     result = crew.kickoff()
     return str(getattr(result, "raw", result)).strip()
+# ──────────────────────────────────────────────────────────────────────────────
