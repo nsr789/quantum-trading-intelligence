@@ -38,66 +38,54 @@ def _rerank(question: str, docs: list[str]) -> list[str]:
 
 
 # ────────────────────────── Crew-powered Q-A function ────────────────────────
+# ───────── Crew-powered Q-A ─────────
 def qa_with_crew(question: str, ticker: str) -> str:
-    """
-    Answer *question* about *ticker*:
-    1. ensure ticker docs present in Chroma (yfinance bootstrap)
-    2. embed-search with ticker filter → top-k
-    3. simple semantic re-ranking
-    4. 2-agent CrewAI answer
-    5. offline deterministic fallback for pytest / no-key env
-    """
-    col = load_vectorstore(ticker)
-    res = col.query(query_texts=[question], n_results=8, where={"ticker": ticker})
-    docs = res["documents"][0] or ["(no matching documents)"]
-    docs = _rerank(question, docs)[:3]  # keep best 3 after re-rank
-    context = "\n".join(f"- {d}" for d in docs)
+    col   = load_vectorstore(ticker)
+    raw   = col.query(query_texts=[question],
+                      n_results=12,           # <- more recall
+                      where={"ticker": ticker})
+    docs  = raw["documents"][0] or ["(no context)"]
+    docs  = _rerank(question, docs)[:3]
+    ctx   = "\n".join(f"{i+1}. {d}" for i, d in enumerate(docs))
 
-    llm_backend = _select_llm()
-
-    # offline deterministic answer (for CI / tests)
-    if llm_backend is _dummy_llm:
-        return f"**Heuristic answer for {ticker} (offline mode)**\n\nContext snippet:\n> {docs[0]}"
-
-    # ────────────── build agents ────────────────────────────────────────────
-    system_prompt = SystemMessage(
-        content=(
-            "You are a sell-side equity analyst. "
-            "Answer the user strictly with the supplied context. "
-            "If insufficient information is present, say 'Not enough data.'"
-        )
-    )
+    llm   = _select_llm()
+    if llm is _dummy_llm:
+        return f"**Heuristic answer for {ticker}**\n\n> {docs[0]}"
 
     researcher = Agent(
-        name="Researcher",
-        role="Context Retriever",
-        goal="Summarise the key facts from the provided context.",
-        backstory="Has access to a company knowledge vector DB.",
+        name="Researcher", role="Context retriever",
+        goal="Extract only the sentences directly relevant to the question.",
+        backstory="Has access to a vector DB seeded with company fact-sheets.",
         allow_delegation=False,
     )
     analyst = Agent(
-        name="Analyst",
-        role="Equity Analyst",
-        goal="Provide a concise, accurate answer.",
-        backstory="Uses the summarised facts to craft the final response.",
+        name="Analyst", role="Equity analyst",
+        goal="Answer the user’s question as accurately as possible.",
+        backstory="Uses the researcher’s citations; no fabrication allowed.",
         allow_delegation=False,
     )
 
     tasks = [
         Task(
-            description=f"From the context below extract the facts needed to answer:\n\n'{question}'\n\nContext:\n{context}",
-            expected_output="Bullet list of facts",
+            description=(
+                f"Given the numbered context snippets below, pick the lines "
+                f"that answer **exactly** this question: '{question}'. "
+                f"Return them as bullet points *with the line number*.\n\n"
+                f"Context:\n{ctx}"
+            ),
+            expected_output="Bullet list like '- [2] Apple…'",
             agent=researcher,
         ),
         Task(
-            description="Write a two-paragraph markdown answer based **only** on the facts.",
-            expected_output="Final answer",
+            description=(
+                "Write a concise, two-paragraph markdown answer **using only "
+                "those bullet-point facts**. Do not add external knowledge."
+            ),
+            expected_output="Markdown answer",
             agent=analyst,
         ),
     ]
 
-    crew = Crew(agents=[researcher, analyst], tasks=tasks, llm=llm_backend, messages=[system_prompt])
+    crew = Crew([researcher, analyst], tasks, llm)
     result = crew.kickoff()
-
-    # CrewAI ≥0.4 returns CrewOutput(raw=...)
     return str(getattr(result, "raw", result)).strip()
