@@ -1,5 +1,9 @@
-"""News & Reddit sentiment sources."""
+"""News & Reddit loaders.
 
+* Tries NewsAPI first → yfinance fallback → synthetic row.
+* **NEW**: keeps the article **url** column so downstream scrapers
+  can fetch full text for transformer-grade sentiment.
+"""
 from __future__ import annotations
 
 import datetime as _dt
@@ -7,7 +11,6 @@ from typing import List
 
 import pandas as pd
 import requests
-
 import yfinance as yf
 
 try:
@@ -26,14 +29,8 @@ NEWS_ENDPOINT = "https://newsapi.org/v2/everything"
 
 @cached
 def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
-    """Return DataFrame[date, title, source] of recent articles.
-
-    Workflow:
-    1. Try NewsAPI (requires key).
-    2. Fallback to yfinance ticker headlines.
-    3. Final fallback – synthetic row so tests never skip.
-    """
-    # 1️⃣  NewsAPI
+    """Return DataFrame[date, title, source, url] of recent articles."""
+    # 1️⃣ NewsAPI -------------------------------------------------------------
     if settings.NEWS_API_KEY:
         params = {
             "q": query,
@@ -48,36 +45,38 @@ def fetch_news(query: str, limit: int = 20) -> pd.DataFrame:
         if items:
             return pd.DataFrame(
                 {
-                    "date": [i["publishedAt"] for i in items],
-                    "title": [i["title"] for i in items],
+                    "date":   [i["publishedAt"] for i in items],
+                    "title":  [i["title"]       for i in items],
                     "source": [i["source"]["name"] for i in items],
+                    "url":    [i["url"]         for i in items],
                 }
             )
 
-    # 2️⃣  yfinance fallback
+    # 2️⃣ yfinance fallback ---------------------------------------------------
     news = yf.Ticker(query).news[:limit]
     if news:
         return pd.DataFrame(
             {
-                "date": [
-                    _dt.datetime.fromtimestamp(n["providerPublishTime"]) for n in news
-                ],
-                "title": [n["title"] for n in news],
-                "source": [n["publisher"] for n in news],
+                "date":   [_dt.datetime.fromtimestamp(n["providerPublishTime"]) for n in news],
+                "title":  [n["title"]      for n in news],
+                "source": [n["publisher"]  for n in news],
+                "url":    [n.get("link", "") for n in news],   # may be empty
             }
         )
 
-    # 3️⃣  Synthetic guarantee (makes tests deterministic)
+    # 3️⃣ deterministic synthetic -------------------------------------------
     log.warning("No live news found – returning synthetic placeholder row.")
     return pd.DataFrame(
         {
-            "date": [_dt.datetime.now(_dt.timezone.utc)],
-            "title": [f"No recent news for {query}"],
+            "date":   [_dt.datetime.now(_dt.timezone.utc)],
+            "title":  [f"No recent news for {query}"],
             "source": ["synthetic"],
+            "url":    [""],
         }
     )
 
 
+# --------------------------- Reddit helper (unchanged) ------------------------
 @cached
 def fetch_reddit(subreddit: str = "wallstreetbets", limit: int = 50) -> List[str]:
     """Return list of post titles (requires Reddit creds)."""
