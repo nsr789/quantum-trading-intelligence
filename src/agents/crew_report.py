@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from typing import Callable, Dict, List
 
+import pandas as pd
 import yfinance as yf
 from crewai import Agent, Crew, Task
 from langchain.schema import HumanMessage
