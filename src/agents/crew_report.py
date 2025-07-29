@@ -141,7 +141,7 @@ def generate_report(ticker: str) -> str:
         ),
     ]
 
-    crew   = Crew([sentiment_agent, macro_agent, val_agent, editor],
-                  tasks, llm)
+    crew   = Crew(agents=[sentiment_agent, macro_agent, val_agent, editor], tasks=tasks, llm=llm)
+
     result = crew.kickoff()
     return str(getattr(result, "raw", result)).strip()
