@@ -51,11 +51,11 @@ Here’s what each page does:
 
 | Page | Purpose |
 |------|---------|
-| **📈 Price Dashboard** | Interactive OHLCV candlestick chart with optional SMA-20 / SMA-50 overlays. |
-| **📰 News Sentiment** | Fetches the latest headlines, classifies tone *(positive / neutral / negative)*, and shows a sentiment pie. |
-| **🤖 AI Research Report** | CrewAI (4 agents) synthesises news, macro, and valuation data into a five-bullet research note — cached to save tokens. |
-| **🔮 Price Forecast** | Pick a model (LSTM · Linear Reg · ARIMA/SARIMA · XGBoost) and get a multi-step price forecast plotted next to recent history. |
-| **🧪 Strategy Back-tester** | Runs **rule-based** strategies — *Mean-Reversion* and *Momentum* — then reports return, Sharpe, hit-rate & equity curve. |
-| **💬 Company Q&A** | Two-agent RAG chatbot (CrewAI + ChromaDB) that answers arbitrary company questions over an embedded knowledge base. |
+| **📈 Price Dashboard** | Interactive OHLC-V candlestick chart with optional SMA-20 / SMA-50 overlays. |
+| **📰 News Sentiment** | Scrapes the most-recent headlines **and full-text** articles, runs them through FinBERT (transformer) to classify tone *(positive / neutral / negative)*, then shows a sentiment pie. |
+| **🤖 AI Research Report** | A 4-agent CrewAI pipeline blends FinBERT sentiment, macro data, and valuation metrics into a concise 5-bullet research note — cached to save tokens. |
+| **🔮 Price Forecast** | Pick a model (LSTM · Linear Reg · ARIMA / SARIMA · XGBoost) and generate a forward price path plotted alongside recent history. |
+| **🧪 Strategy Back-tester** | Evaluate **rule-based** trading strategies — *Mean-Reversion* and *SMA-Momentum* — and view Sharpe, hit-rate, and equity curve. |
+| **💬 Company Q&A** | Two-agent RAG chatbot (CrewAI + ChromaDB) that answers detailed company questions using an embedded knowledge base. |
 """
 )
