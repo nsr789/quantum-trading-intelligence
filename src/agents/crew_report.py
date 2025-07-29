@@ -1,3 +1,4 @@
+# ─────────────────────────── src/agents/crew_report.py ──────────────────────
 from __future__ import annotations
 
 import os
@@ -10,64 +11,64 @@ from langchain_openai import ChatOpenAI
 
 from src.data.cache import cached
 from src.data.macro import get_unemployment_rate
-from src.data.news import fetch_news
-from src.utils.llm import chat_stream
+from src.agents.tools import company_news_sentiment         # <- NEW
+from src.utils.llm   import chat_stream
 from src.utils.logging import get_logger
 
 log = get_logger(module="crew_report")
 
-
-# ─────────────────────────────── helpers ──────────────────────────────────
-def _dummy_llm(prompt: str) -> str:  # offline fallback
+# ───────────────────────────── LLM helper ────────────────────────────────────
+def _dummy_llm(prompt: str) -> str:                       # offline fallback
     return "".join(chat_stream([HumanMessage(content=prompt)]))
 
 
 def _select_llm() -> Callable | ChatOpenAI:
     key = os.getenv("OPENAI_API_KEY")
     if key:
-        return ChatOpenAI(api_key=key, model_name="gpt-3.5-turbo-0125", temperature=0)
+        return ChatOpenAI(api_key=key,
+                          model_name="gpt-3.5-turbo-0125",
+                          temperature=0)
     return _dummy_llm
 
 
+# ───────────────────── fundamentals helper (unchanged) ──────────────────────
 def fundamentals(ticker: str) -> Dict[str, str | float]:
-    """Return lite fundamentals dict, handle missing keys gracefully."""
     try:
         info = yf.Ticker(ticker).info
         return {
-            "ttm_pe": info.get("trailingPE"),
+            "ttm_pe":     info.get("trailingPE"),
             "rev_growth": info.get("revenueGrowth"),
-            "sector": info.get("sector"),
+            "sector":     info.get("sector"),
         }
-    except Exception as exc:  # network/offline
-        log.warning("fundamentals fetch failed: {}", exc)
+    except Exception as exc:                                 # noqa: BLE001
+        log.warning("fundamentals_fetch_failed", error=str(exc))
         return {}
 
 
-# ─────────────────────────────── main entry ──────────────────────────────
-@cached  # <= joblib cache: repeated tickers free
+# ──────────────────────────── main entry point ──────────────────────────────
+@cached           # joblib-cache so repeat tickers cost ≈0 tokens
 def generate_report(ticker: str) -> str:
-    """Return a 5-bullet markdown research note via CrewAI or heuristic fallback."""
-    # ---------- FAST NEWS SENTIMENT ----------
-    news_df = fetch_news(ticker, limit=30)
-    if news_df.empty:
-        sent = {"positive": 0.0, "negative": 0.0, "neutral": 1.0}
-    else:
-        from textblob import TextBlob
+    """
+    5-bullet equity research note via CrewAI.
 
-        polarities = news_df["title"].map(lambda t: TextBlob(str(t)).sentiment.polarity)
-        sent = {
-            "positive": round((polarities > 0.1).mean(), 2),
-            "negative": round((polarities < -0.1).mean(), 2),
-            "neutral": round((polarities.abs() <= 0.1).mean(), 2),
-        }
+    * News sentiment: FinBERT on full articles → TextBlob fallback.
+    * Macro: latest unemployment.
+    * Valuation: lite fundamentals from yfinance.
+    """
+    # ---------- SENTIMENT ---------------------------------------------------
+    try:
+        sent = company_news_sentiment(ticker, limit=30, full_article=True)
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("finbert_failed_fallback_textblob", error=str(exc))
+        sent = company_news_sentiment(ticker, limit=30, full_article=False)
 
-    # ---------- MACRO ----------
+    # ---------- MACRO -------------------------------------------------------
     macro = {"unemployment": get_unemployment_rate()}
 
-    # ---------- FUNDAMENTALS ----------
+    # ---------- FUNDAMENTALS -----------------------------------------------
     facts = fundamentals(ticker)
 
-    # ---------- FALLBACK if no LLM ----------
+    # ---------- OFFLINE FALLBACK (no API keys) ------------------------------
     llm = _select_llm()
     if llm is _dummy_llm:
         bias = max(sent, key=sent.get)
@@ -78,22 +79,22 @@ def generate_report(ticker: str) -> str:
             "- Market tone remains driven by headline momentum\n"
             "- Watch EPS revisions versus sentiment trend for confirmation\n"
             "- Positive tone may support near-term price action\n"
-            "- Re-evaluate if negative share of headlines exceeds 30 %"
+            "- Re-evaluate if negative share of headlines exceeds 30 %"
         )
 
-    # ---------- CrewAI agents ----------
+    # ---------- CrewAI agents ----------------------------------------------
     sentiment_agent = Agent(
         name="Sentiment Analyst",
         role="News-Sentiment Analyst",
         goal="Summarise headline sentiment",
-        backstory="Quantifies positive/negative tone from news.",
+        backstory="Quantifies positive/negative tone from recent news.",
         allow_delegation=False,
     )
     macro_agent = Agent(
         name="Macro Analyst",
         role="Macro Analyst",
         goal="Comment on macro backdrop",
-        backstory="Access to unemployment & CPI data.",
+        backstory="Uses unemployment & CPI data.",
         allow_delegation=False,
     )
     val_agent = Agent(
@@ -118,7 +119,10 @@ def generate_report(ticker: str) -> str:
             agent=sentiment_agent,
         ),
         Task(
-            description=f"Provide one sentence on macro backdrop (unemployment={macro['unemployment']})",
+            description=(
+                f"Provide one sentence on macro backdrop "
+                f"(unemployment_rate={macro['unemployment']})"
+            ),
             expected_output="Macro bullet",
             agent=macro_agent,
         ),
@@ -129,29 +133,15 @@ def generate_report(ticker: str) -> str:
         ),
         Task(
             description=(
-                "Combine the three analyst bullets into **exactly five** markdown bullet points "
-                f"that give market colour on {ticker}."
+                "Combine the three analyst bullets into **exactly five** "
+                f"markdown bullet points that give market colour on {ticker}."
             ),
             expected_output="5 markdown bullets",
             agent=editor,
         ),
     ]
 
-    crew = Crew(agents=[sentiment_agent, macro_agent, val_agent, editor], tasks=tasks, llm=llm)
+    crew   = Crew([sentiment_agent, macro_agent, val_agent, editor],
+                  tasks, llm)
     result = crew.kickoff()
     return str(getattr(result, "raw", result)).strip()
-
-
-def fundamentals(ticker: str) -> Dict[str, str | float]:
-    """Return lite fundamentals dict, swallow network/ratelimit errors."""
-    try:
-        info = yf.Ticker(ticker).info
-        return {
-            "ttm_pe":      info.get("trailingPE"),
-            "rev_growth":  info.get("revenueGrowth"),
-            "sector":      info.get("sector"),
-        }
-    except Exception as exc:
-        # structlog expects %-style or key/value pairs – avoid {} formatting
-        log.warning("fundamentals_fetch_failed", error=str(exc))
-        return {}
